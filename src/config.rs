@@ -13,6 +13,7 @@ pub struct AppConfig{
     pub helius_api_url_beta: String,
     pub helius_api_key: String,
     pub helius_enhanced_api_url: String,
+    pub helius_websocks_url_key: String,
 }
 
 // 加载配置

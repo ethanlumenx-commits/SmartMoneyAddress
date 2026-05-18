@@ -7,13 +7,14 @@ use crate::repo::raw_addresses_repo::RawAddressesRepo;
 use crate::service::helius_json_seriver::HleiusJsonService;
 
 use sqlx::PgPool;
-use anyhow;
+
 use tracing::{info, warn, error, debug};
 
 struct AddressReadService;
 
 
 impl AddressReadService {
+    /// find address that are not checked in database raw_addresses table and insert them into swaps table
     pub async fn find_by_address(db: &PgPool) -> anyhow::Result<()> {
         info!("Starting AddressReadService::find_by_address");
         let config = load_config();
@@ -96,6 +97,60 @@ impl AddressReadService {
         info!("AddressReadService::find_by_address completed successfully");
         Ok(())
     }
+
+    /// find address that are not checked by address
+    pub async fn find_by_address_by_address(db: &PgPool, address: &str) -> anyhow::Result<()> {
+        info!("Starting AddressReadService::find_by_address_by_address");
+        let config = load_config();
+        let helius_client = HeliusClient::new(config.helius_api_url);
+        let enhanced_client = EnhancedClient::new(config.helius_enhanced_api_url);
+
+        let helius_result = match helius_client.get_signatures_for_address(address, 100).await {
+            Ok(v) => {
+                debug!("Fetched {} signatures for address {}", v.len(), address);
+                v
+            },
+            Err(e) => {
+                warn!("Skipping address {}: failed to get signatures - {}", address, e);
+                return Ok(())
+            }
+        };
+
+        let signatures = helius_result.iter().map(|x| x.signature.clone()).collect::<Vec<_>>();
+
+        let enhanced_result = match enhanced_client.get_transactions_for_signatures(signatures).await {
+            Ok(v) => {
+                debug!("Fetched {} transactions for address {}", v.len(), address);
+                v
+            },
+            Err(e) => {
+                warn!("Skipping address {}: failed to get transactions - {}", address, e);
+                return Ok(())
+            }
+        };
+
+        let helius_json: Vec<_> = enhanced_result.iter().map(|x| x.to_db_model()).collect();
+        debug!("Converted {} transactions to HeliusJson models for address {}", helius_json.len(), address);
+        let filtered_json = SwapsService::filter_swaps(helius_json);
+        let filtered_count = filtered_json.len();
+        debug!("Filtered to {} swap transactions for address {}", filtered_count, address);
+        if filtered_json.is_empty() {
+            info!("No swap transactions found for address {}, skipping insert", address);
+            return Ok(())
+        }
+        if let Err(e) = HleiusJsonService::batch_insert(db, filtered_json).await {
+            error!("Failed to insert data for address {}: {}", address, e);
+            return Ok(())
+        }
+        info!("Successfully inserted {} swap transactions for address {}", filtered_count, address);
+        RawAddressesRepo::update_wait_check_addresses(db, vec![address.to_string()]).await?;
+        info!("Updated {} addresses to checked status", 1);
+        info!("AddressReadService::find_by_address_by_address completed successfully");
+
+        Ok(())
+
+    }
+
 }
 
 #[cfg(test)]
