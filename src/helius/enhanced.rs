@@ -8,7 +8,7 @@ use anyhow;
 use crate::dbmodel::helius_json::HeliusJson;
 
 // 👇 这就是【你现在返回的真实结构】
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionSignature {
     pub description:Option<String>,       
@@ -83,11 +83,11 @@ impl EnhancedClient {
 
 impl TransactionSignature {
     // 返回数据库类型
-    pub fn to_db_model(&self) -> HeliusJson {
-        HeliusJson {
-            signature: self.signature.clone().unwrap(),
-            address: self.fee_payer.clone().unwrap(),
-            timestamp: self.timestamp.unwrap(),
+    pub fn to_db_model(&self) -> Option<HeliusJson> {
+        Some(HeliusJson {
+            signature: self.signature.clone()?,
+            address: self.fee_payer.clone()?,
+            timestamp: self.timestamp?,
             r#type: self.r#type.clone(),
             source: self.source.clone(),
             fee: self.fee.clone(),
@@ -96,6 +96,6 @@ impl TransactionSignature {
             parsed: Some(false),
             created_at: Some(chrono::Utc::now()),
             events: self.events.clone(),
-        }
+        })
     }
 }

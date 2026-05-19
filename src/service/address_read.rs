@@ -63,7 +63,9 @@ impl AddressReadService {
                     }
                 };
 
-                let helius_json: Vec<_> = enhanced_result.iter().map(|x| x.to_db_model()).collect();
+                let helius_json: Vec<_> = enhanced_result.iter()
+                    .filter_map(|x| x.to_db_model())
+                    .collect();
                 debug!("Converted {} transactions to HeliusJson models for address {}", helius_json.len(), item.address);
 
                 let filtered_json = SwapsService::filter_swaps(helius_json);
@@ -129,7 +131,9 @@ impl AddressReadService {
             }
         };
 
-        let helius_json: Vec<_> = enhanced_result.iter().map(|x| x.to_db_model()).collect();
+        let helius_json: Vec<_> = enhanced_result.iter()
+            .filter_map(|x| x.to_db_model())
+            .collect();
         debug!("Converted {} transactions to HeliusJson models for address {}", helius_json.len(), address);
         let filtered_json = SwapsService::filter_swaps(helius_json);
         let filtered_count = filtered_json.len();
